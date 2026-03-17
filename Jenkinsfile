@@ -2,9 +2,9 @@ pipeline {
    agent any
    
    environment {
-       GCP_PROJECT = 'REPLACE_WITH_YOUR_GCP_PROJECT_ID'
+       GCP_PROJECT = 'mlops-vertex-project'
        GCP_REGION = 'us-central1'
-       GCS_BUCKET = 'gs://REPLACE_WITH_YOUR_BUCKET_NAME'
+       GCS_BUCKET = 'gs://mlops-bucket-ayush-123'
        CONTAINER_REGISTRY = 'gcr.io/${GCP_PROJECT}'
        GOOGLE_APPLICATION_CREDENTIALS = credentials('gcp-service-account')
    }
