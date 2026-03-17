@@ -1,0 +1,7 @@
+venv/
+ml-training-env/
+__pycache__/
+.pytest_cache/
+data/dataset.csv
+models/
+.DS_Store
