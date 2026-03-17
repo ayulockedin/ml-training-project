@@ -29,6 +29,15 @@ pipeline {
            }
        }
        
+       stage('Generate Data') {
+           steps {
+               sh '''
+                   . ${PYTHON_ENV}/bin/activate
+                   python3 scripts/generate_dataset.py
+               '''
+           }
+       }
+       
        stage('Data Validation') {
            steps {
                sh '''
