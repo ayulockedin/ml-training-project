@@ -29,10 +29,8 @@ pipeline {
                sh '''
                    gcloud auth activate-service-account --key-file=${GOOGLE_APPLICATION_CREDENTIALS}
                    gcloud config set project ${GCP_PROJECT}
-                   gcloud auth configure-docker
                    
-                   docker build -t ${CONTAINER_REGISTRY}/ml-trainer:${BUILD_NUMBER} .
-                   docker push ${CONTAINER_REGISTRY}/ml-trainer:${BUILD_NUMBER}
+                   gcloud builds submit --tag ${CONTAINER_REGISTRY}/ml-trainer:${BUILD_NUMBER}
                '''
            }
        }
