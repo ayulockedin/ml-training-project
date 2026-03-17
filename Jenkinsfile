@@ -2,13 +2,19 @@ pipeline {
    agent any
    
    environment {
-       PYTHON_ENV = 'ml-training-env'
+       GCP_PROJECT = 'REPLACE_WITH_YOUR_GCP_PROJECT_ID'
+       GCP_REGION = 'us-central1'
+       GCS_BUCKET = 'gs://REPLACE_WITH_YOUR_BUCKET_NAME'
+       CONTAINER_REGISTRY = 'gcr.io/${GCP_PROJECT}'
+       GOOGLE_APPLICATION_CREDENTIALS = credentials('gcp-service-account')
    }
    
    parameters {
-       choice(name: 'ML_FRAMEWORK', 
-              choices: ['sklearn', 'tensorflow', 'pytorch'],
-              description: 'Select ML framework for training')
+       string(name: 'JOB_NAME', defaultValue: 'ml-training-job',
+              description: 'Name for the Vertex AI training job')
+       choice(name: 'MACHINE_TYPE', 
+              choices: ['n1-standard-4', 'n1-standard-8', 'n1-highmem-4'],
+              description: 'Machine type for training')
    }
    
    stages {
@@ -18,49 +24,48 @@ pipeline {
            }
        }
        
-       stage('Setup Environment') {
+       stage('Build Training Container') {
            steps {
                sh '''
-                   python3 -m venv ${PYTHON_ENV}
-                   . ${PYTHON_ENV}/bin/activate
-                   pip install --upgrade pip
-                   pip install -r requirements.txt
+                   gcloud auth activate-service-account --key-file=${GOOGLE_APPLICATION_CREDENTIALS}
+                   gcloud config set project ${GCP_PROJECT}
+                   gcloud auth configure-docker
+                   
+                   docker build -t ${CONTAINER_REGISTRY}/ml-trainer:${BUILD_NUMBER} .
+                   docker push ${CONTAINER_REGISTRY}/ml-trainer:${BUILD_NUMBER}
                '''
            }
        }
        
-       stage('Generate Data') {
+       stage('Upload Training Data') {
            steps {
                sh '''
-                   . ${PYTHON_ENV}/bin/activate
-                   python3 scripts/generate_dataset.py
+                   gsutil cp -r data/ ${GCS_BUCKET}/data/
                '''
            }
        }
        
-       stage('Data Validation') {
+       stage('Submit Vertex AI Training Job') {
            steps {
                sh '''
-                   . ${PYTHON_ENV}/bin/activate
-                   python3 -c "import pandas as pd; df = pd.read_csv('data/dataset.csv'); print(f'Data shape: {df.shape}')"
+                   pip install google-cloud-aiplatform
+                   
+                   python vertex_training.py \
+                       --project-id ${GCP_PROJECT} \
+                       --region ${GCP_REGION} \
+                       --display-name ${JOB_NAME}-${BUILD_NUMBER} \
+                       --container-uri ${CONTAINER_REGISTRY}/ml-trainer:${BUILD_NUMBER} \
+                       --model-dir ${GCS_BUCKET}/models/${BUILD_NUMBER}/ \
+                       --training-data ${GCS_BUCKET}/data/
                '''
            }
        }
        
-       stage('Train Model') {
+       stage('Download Model Artifacts') {
            steps {
-               script {
-                   def trainScript = "src/train_${params.ML_FRAMEWORK}.py"
-                   sh """
-                       . ${PYTHON_ENV}/bin/activate
-                       python3 ${trainScript}
-                   """
-               }
-           }
-       }
-       
-       stage('Archive Artifacts') {
-           steps {
+               sh '''
+                   gsutil cp -r ${GCS_BUCKET}/models/${BUILD_NUMBER}/ ./models/
+               '''
                archiveArtifacts artifacts: 'models/**/*', fingerprint: true
            }
        }
@@ -68,13 +73,10 @@ pipeline {
    
    post {
        success {
-           echo 'Training completed successfully!'
+           echo 'Vertex AI training completed successfully!'
        }
        failure {
-           echo 'Training failed!'
-       }
-       always {
-           cleanWs()
+           echo 'Training job failed!'
        }
    }
 }
